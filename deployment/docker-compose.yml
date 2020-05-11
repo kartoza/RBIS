@@ -1,0 +1,215 @@
+#
+# Production server with UWSGI configured to run on port 8080
+# and web configured to run directly on port 80
+#
+# docker-compose build
+# docker-compose up -d web
+#
+# See accompanying Make commands for easy collectstatic etc.
+
+version: '2'
+volumes:
+  geoserver-data-dir:
+services:
+
+  smtp:
+    # Note you cannot scale if you use container_name
+    container_name: rbis-smtp
+    image: catatnight/postfix
+    hostname: postfix
+    environment:
+      # You could change this to something more suitable
+      - maildomain=kartoza.com
+      - smtp_user=noreply:docker
+    restart: unless-stopped
+
+  db:
+    # Note you cannot scale if you use container_name
+    container_name: rbis-db
+    image: kartoza/postgis:9.6-2.4
+    volumes:
+      #- ./pg/postgres_data:/var/lib/postgresql
+      - ./backups:/backups
+      - ./sql:/sql
+    environment:
+      - ALLOW_IP_RANGE=0.0.0.0/0
+      - USERNAME=docker
+      - PASS=docker
+    restart: unless-stopped
+  #  Uncomment the next line to have an access with PGAdmin using localhost and port 25432 on your computer.
+  #  Only for development !
+  #  ports:
+  #    - "25432:5432"
+
+  data-dir-conf:
+    image: geosolutionsit/geoserver_data:2.13.x
+    restart: on-failure
+    command: /bin/true
+    volumes:
+      - geoserver-data-dir:/geoserver_data/data
+
+  geoserver:
+    image: geosolutionsit/geoserver-docker:2.13.x
+    restart: unless-stopped
+    depends_on:
+      - db
+      - data-dir-conf
+    volumes:
+      - geoserver-data-dir:/geoserver_data/data
+
+  rbis_uwsgi:
+    build:
+      context: docker
+      dockerfile: Dockerfile
+    image: rbis_uwsgi:latest
+
+  uwsgi:
+    build:
+      context: docker
+    command: uwsgi --ini /home/web/uwsgi.conf
+    working_dir: /usr/src/app
+    environment:
+      - DATABASE_NAME=gis
+      - DATABASE_USERNAME=docker
+      - DATABASE_PASSWORD=docker
+      - DATABASE_HOST=db
+      - DJANGO_SETTINGS_MODULE=core.settings.prod_docker
+      - VIRTUAL_HOST=rbis.kartoza.com
+      - VIRTUAL_PORT=8080
+      - RABBITMQ_HOST=rabbitmq
+      - CONTACT_US_EMAIL=dimas@kartoza.com
+    volumes:
+      - ../django_project:/home/web/django_project
+      - ./static:/home/web/static:rw
+      - ./media:/home/web/media:rw
+      - ./reports:/home/web/reports
+      - ./logs:/var/log/
+    links:
+      - smtp:smtp
+      - db:db
+      - geoserver:geoserver
+      - worker:worker
+      - rabbitmq:rabbitmq
+    restart: on-failure:5
+    user: root
+
+  dbbackups:
+    # Note you cannot scale if you use container_name
+    container_name: rbis-db-backups
+    image: kartoza/pg-backup:9.6
+    hostname: pg-backups
+    volumes:
+      - ./backups:/backups
+    environment:
+      # take care to let the project name below match that
+      # declared in the top of the makefile
+      - DUMPPREFIX=PG_rbis
+      # These are all defaults anyway, but setting explicitly in
+      # case we ever want to ever use different credentials
+      - PGUSER=docker
+      - PGPASSWORD=docker
+      - PGPORT=5432
+      - PGHOST=db
+      - PGDATABASE=gis
+    restart: unless-stopped
+     
+
+  # This is normally the main entry point for a production server
+  web:
+    # Note you cannot scale if you use container_name
+    container_name: rbis-web
+    image: nginx
+    hostname: nginx
+    entrypoint: /etc/nginx/sites-available/docker-entrypoint.sh
+    command: prod
+    environment:
+      GEOSERVER_FORWARD: 1
+    volumes:
+      - ./production/nginx_conf/sites-available:/etc/nginx/sites-available:ro
+    links:
+      - uwsgi:django
+      - db
+      - geoserver
+    restart: unless-stopped
+     
+
+  btsync-db:
+    # BTSync backups for database dumps
+    image: kartoza/btsync
+    restart: unless-stopped
+    volumes:
+      # We mount RW so that we can use remove peer to clean up old backups off the server
+      - ./backups:/web:rw
+     
+
+  btsync-media:
+    # BTSync backups for django media
+    image: kartoza/btsync
+    restart: unless-stopped
+    volumes:
+      # We mount RO as we do not really want peers to change this data
+      - ./media:/web:ro
+
+  rabbitmq:
+    image: library/rabbitmq:3.6
+    hostname: rabbitmq
+    environment:
+      - RABBIT_PASSWORD=rabbit_test_password
+      - USER=rabbit_user
+      - RABBITMQ_NODENAME=rabbit
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: docker
+    hostname: worker
+    working_dir: /usr/src/bims
+    command: celery worker --app=bims.celery:app -B -l info
+    entrypoint: []
+    environment:
+      - DATABASE_NAME=gis
+      - DATABASE_USERNAME=docker
+      - DATABASE_PASSWORD=docker
+      - DATABASE_HOST=db
+      - DJANGO_SETTINGS_MODULE=core.settings.dev_docker
+      - VIRTUAL_HOST=bims.kartoza.com
+      - VIRTUAL_PORT=8080
+      - RABBITMQ_HOST=rabbitmq
+      - GEOCONTEXT_URL=https://geocontext.kartoza.com
+      - GEOCONTEXT_COLLECTION_KEY=climate
+      - CONTACT_US_EMAIL=dimas@kartoza.com
+      - APP_NAME=bims
+      - ASYNC_SIGNALS_GEONODE=True
+      - PYTHONPATH=/usr/src/app:/usr/src/bims:/home/web/django_project
+    volumes:
+      - ../django_project:/home/web/django_project
+      - ./static:/home/web/static:rw
+      - ./media:/home/web/media:rw
+      - ./reports:/home/web/reports
+      - ./logs:/var/log/
+    links:
+      - smtp:smtp
+      - db:db
+      - geoserver:geoserver
+      - rabbitmq:rabbitmq
+      - cache:cache
+    restart: unless-stopped
+     
+
+  elasticsearch:
+    # Note you cannot scale if you use conteiner_name
+    container_name: rbis-elasticsearch
+    restart: on-failure:5
+    #  read_only: true
+    image: elasticsearch:2.4.2
+    hostname: elasticsearch
+    environment:
+      - cluster.name=docker-cluster
+      - bootstrap.memory_lock=true
+     
+
+  cache:
+   image: memcached
+   entrypoint:
+    - memcached
+    - -m 64
