@@ -7,7 +7,6 @@ MAINTAINER Dimas Ciputra<dimas@kartoza.com>
 ARG RBIS_TAG=develop
 WORKDIR /usr/src
 RUN git clone --depth=1 --branch ${RBIS_TAG} git://github.com/dimasciput/RBIS.git /usr/src/RBIS_BIMS
-RUN cd /usr/src/RBIS_BIMS/django_project && git submodule init && git submodule update
 RUN mkdir -p /usr/src/rbis
 RUN cp -r RBIS_BIMS/django_project/* /usr/src/rbis
 

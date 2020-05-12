@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 
 if [ -z "$REPO_NAME" ]; then
-	REPO_NAME=kartoza
+	REPO_NAME=dimasciput
 fi
 
 if [ -z "$IMAGE_NAME" ]; then
-	IMAGE_NAME=ledet_nginx_conf
+	IMAGE_NAME=rbis_nginx_conf
 fi
 
 if [ -z "$TAG_NAME" ]; then

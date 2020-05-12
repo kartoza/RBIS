@@ -1,0 +1,375 @@
+version: '2'
+volumes:
+  nginx-logs: {}
+  nginx-conf-data: {}
+  django-static: {}
+  db-backups: {}
+  django-logs: {}
+  django-media-backups: {}
+  postgis-data: {}
+  geoserver-data-dir: {}
+  django-media: {}
+  django-reports: {}
+services:
+  rbis-backup:
+    image: kartoza/btsync
+    environment:
+      DEVICE: rbis.org
+      SECRET: A4HY6IHN72LW4ZAU7BNXIYU2OPJLUKKXS
+    stdin_open: true
+    volumes:
+    - sync-data:/web
+    tty: true
+    labels:
+      io.rancher.container.pull_image: always
+  geoserver:
+    image: geosolutionsit/geoserver-docker:2.12.x
+    environment:
+      GEOSERVER_ADMIN_PASSWORD: admingeoserver
+      SITEURL: http:///
+    volumes:
+    - geoserver-data-dir:/geoserver_data/data
+    - sync-data:/sync-data
+    links:
+    - geonode-db:geonode-db
+    - data-dir-conf:data-dir-conf
+    - db:db
+  cache:
+    image: memcached
+    stdin_open: true
+    entrypoint:
+    - memcached
+    - -m 64
+    tty: true
+    labels:
+      io.rancher.container.pull_image: always
+  smtp:
+    image: catatnight/postfix
+    environment:
+      maildomain: kartoza.com
+      smtp_user: noreply:docker
+  clear-search-results:
+    image: dimasciput/rbis_uwsgi:latest
+    environment:
+      ECOLOGICAL_CONDITION_FILTER: 'True'
+      DATABASE_PASSWORD: docker
+      CONSERVATION_STATUS_FILTER: 'True'
+      HAYSTACK_HOST: elasticsearch
+      AUTH_WITH_EMAIL_ONLY: 'True'
+      ADMIN_EMAILS: dimas@kartoza.com
+      GEOIP_PATH: /home/web/media/geoip.db
+      REFERENCE_CATEGORY_FILTER: 'True'
+      DEFAULT_BACKEND_DATASTORE: datastore
+      ROOT_URLCONF: rbis_core.urls
+      APP_NAME: rbis
+      STATIC_ROOT: /home/web/static
+      GEOSERVER_LOCATION: http://geoserver:8080/geoserver/
+      GEONODE_GEODATABASE_HOST: geonode-db
+      UWSGI_CMD: uwsgi --ini /usr/src/rbis/uwsgi.conf
+      ENABLE_MODULE_FILTER: 'True'
+      GEONODE_GEODATABASE_PASSWORD: docker
+      GEONODE_INSTANCE_NAME: geonode
+      ASYNC_SIGNALS_GEONODE: 'True'
+      GEOCONTEXT_URL: https://geocontext.kartoza.com/
+      ALLOWED_HOSTS: '["localhost","127.0.0.1",""]'
+      DATABASE_HOST: db
+      GEONODE_DATABASE_PASSWORD: docker
+      RABBITMQ_HOST: rabbitmq
+      GEONODE_DATABASE: gis
+      GEONODE_DATABASE_USER: docker
+      PYTHONPATH: /usr/src/rbis:/usr/src/app:/usr/src/bims:/home/web/django_project
+      SENTRY_KEY: https://9806d92a5ba64fe9b0bb5e8cb838fd12@sentry.io/1289403
+      VIRTUAL_PORT: '8000'
+      APPLICATION_NAME: FBIS
+      GEONODE_GEODATABASE: geonode_data
+      CONTACT_US_EMAIL: fbis@frcsa.org.za
+      SPATIAL_SCALE_TITLE: SPATIAL SCALE
+      GEONODE_GEODATABASE_USERNAME: docker
+      DATE_TITLE: TEMPORAL SCALE
+      COLLECTOR_FILTER: 'false'
+      MEDIA_ROOT: /home/web/media
+      DATABASE_NAME: gis
+      GEOCONTEXT_COLLECTION_KEY: ledet
+      DJANGO_SETTINGS_MODULE: rbis_core.settings.prod_docker
+      C_FORCE_ROOT: '1'
+      DATABASE_USERNAME: docker
+      IS_CELERY: 'False'
+      INSTITUTION_ID_DEFAULT: RBIS
+      MONITORING_ENABLED: 'False'
+    entrypoint:
+    - /bin/sh
+    volumes:
+    - django-static:/home/web/static:rw
+    - django-media:/home/web/media:rw
+    - django-reports:/home/web/reports
+    - django-logs:/var/log/
+    - sync-data:/data
+    - geoserver-data-dir:/usr/src/geonode/geoserver/data/data
+    links:
+    - geoserver:geoserver
+    - db:db
+    - geonode-db:geonode-db
+    - worker:worker
+    command: -c "cd /usr/src/bims; python manage.py clear_search_results"
+    labels:
+      io.rancher.container.start_once: 'true'
+      io.rancher.container.pull_image: always
+      cron.schedule: 0 */5 * * *
+  data-dir-conf:
+    image: geosolutionsit/geoserver_data:2.12.x
+    volumes:
+    - geoserver-data-dir:/geoserver_data/data
+    labels:
+      io.rancher.container.start_once: 'true'
+  dbrestore:
+    image: kartoza/postgis:9.6-2.4
+    environment:
+      ALLOW_IP_RANGE: 10.42.0.0/16
+      POSTGRES_DB: gis
+      POSTGRES_PASS: docker
+      POSTGRES_USER: docker
+    volumes:
+    - db-backups:/backups
+    - postgis-data:/sql
+    command: bash -c "su - postgres -c 'dropdb gis'; createdb -O docker -T template_postgis gis; pg_restore /backups/latest.dmp | psql gis"
+    labels:
+      io.rancher.container.pull_image: always
+      io.rancher.container.start_once: 'true'
+  mediabackup:
+    image: kartoza/sftp-backup:1.0
+    environment:
+      DAILY: '3'
+      DUMPPREFIX: MEDIA_bims
+      MONTHLY: '2'
+      TARGET_FOLDER: /media_backup
+      USE_SFTP_BACKUP: 'False'
+      YEARLY: '1'
+    volumes:
+    - django-media-backups:/backups
+    - django-media:/media_backup
+  btsync-data:
+    image: kartoza/btsync:rancher
+    hostname: btsync-data
+    environment:
+      DEVICE: BimsDatabase
+      SECRET: ''
+      STANDBY_MODE: 'TRUE'
+    volumes:
+    - db-backups:/web:rw
+  geonode-db:
+    image: kartoza/postgis:9.6-2.4
+    environment:
+      ALLOW_IP_RANGE: 10.42.0.0/16
+      POSTGRES_DB: geonode_data
+      POSTGRES_PASS: docker
+      POSTGRES_USER: docker
+    stdin_open: true
+    volumes:
+    - db-backups:/backups
+    - postgis-data:/sql
+    - sync-data:/raw
+    tty: true
+    labels:
+      io.rancher.container.pull_image: always
+  rabbitmq:
+    image: library/rabbitmq
+    environment:
+      RABBITMQ_NODENAME: rabbit
+      RABBIT_PASSWORD: rabbit_test_password
+      USER: rabbit_user
+  dbbackups:
+    image: kartoza/pg-backup:9.6
+    hostname: pg-backups
+    environment:
+      DUMPPREFIX: PG_bims
+      PGDATABASE: gis
+      PGHOST: db
+      PGPASSWORD: docker
+      PGPORT: '5432'
+      PGUSER: docker
+    volumes:
+    - db-backups:/backups
+  nginx-conf-data:
+    image: dimasciput/rbis_nginx_conf:latest
+    environment:
+      ALWAYS_INIT: 'True'
+      TARGET: /etc/nginx/sites-available
+    volumes:
+    - nginx-conf-data:/etc/nginx/sites-available
+    labels:
+      io.rancher.container.pull_image: always
+      io.rancher.container.start_once: 'true'
+  web:
+    image: nginx
+    environment:
+      GEOSERVER_FORWARD: 'True'
+    entrypoint:
+    - /etc/nginx/sites-available/docker-entrypoint.sh
+    volumes:
+    - django-static:/home/web/static:ro
+    - django-media:/home/web/media:ro
+    - nginx-conf-data:/etc/nginx/sites-available
+    - nginx-logs:/var/log/nginx
+    links:
+    - uwsgi:django
+    - geoserver:geoserver
+    command: prod
+    labels:
+      io.rancher.container.pull_image: always
+  btsync-media:
+    image: kartoza/btsync:rancher
+    hostname: btsync-media
+    environment:
+      DEVICE: BimsMedia
+      SECRET: ''
+      STANDBY_MODE: 'TRUE'
+    volumes:
+    - django-media:/web:rw
+  uwsgi:
+    image: dimasciput/rbis_uwsgi:latest
+    environment:
+      ECOLOGICAL_CONDITION_FILTER: 'True'
+      DATABASE_PASSWORD: docker
+      CONSERVATION_STATUS_FILTER: 'True'
+      HAYSTACK_HOST: elasticsearch
+      MONITORING_ENABLED: 'False'
+      ADMIN_EMAILS: fbis@frcsa.org.za
+      MAP_TILER_KEY: GfepnJl8jdQrAm6UYO66
+      GEOIP_PATH: /home/web/media/geoip.db
+      ENABLE_MODULE_FILTER: 'True'
+      ROOT_URLCONF: rbis_core.urls
+      GEOSERVER_LOCATION_SITE_LAYER: bims:location_site_view
+      GEOSERVER_ADMIN_PASSWORD: admingeoserver
+      SITE_DOMAIN_NAME: http://staging.rbis.kartoza.com/
+      SITE_READY: 'True'
+      APP_NAME: rbis
+      STATIC_ROOT: /home/web/static
+      GEOSERVER_LOCATION: http://geoserver:8080/geoserver/
+      GEONODE_GEODATABASE_HOST: geonode-db
+      ENABLE_UPLOAD_DATA: 'False'
+      RECAPTCHA_KEY: 6Lc0X6kUAAAAAK7gMjMj2ltmKB-3B4nMZAo901zN
+      UWSGI_CMD: uwsgi --ini /usr/src/rbis/uwsgi.conf
+      GEONODE_GEODATABASE_PASSWORD: docker
+      GEONODE_INSTANCE_NAME: geonode
+      ASYNC_SIGNALS_GEONODE: 'True'
+      GEOCONTEXT_URL: https://geocontext.kartoza.com/
+      ALLOWED_HOSTS: '["localhost","127.0.0.1","staging.rbis.kartoza.com"]'
+      DATABASE_HOST: db
+      GEONODE_DATABASE_PASSWORD: docker
+      GEOSERVER_PUBLIC_LOCATION: http://staging.rbis.kartoza.com/geoserver/
+      RABBITMQ_HOST: rabbitmq
+      GEONODE_DATABASE: gis
+      GEONODE_DATABASE_USER: docker
+      PYTHONPATH: /usr/src/rbis:/usr/src/app:/usr/src/bims:/home/web/django_project
+      SENTRY_KEY: http://a3c812775ecd4178b21e35615f09134d:9dfcfed4497d4a07a75f2ed1cd73a00b@sentry.kartoza.com/4
+      SASS_ENABLED: 'False'
+      PROXY_ALLOWED_HOSTS: kartoza.com
+      VIRTUAL_PORT: '8000'
+      RAVEN_CONFIG_DSN: http://a3c812775ecd4178b21e35615f09134d:9dfcfed4497d4a07a75f2ed1cd73a00b@sentry.kartoza.com/4
+      VIRTUAL_HOST: staging.rbis.kartoza.com
+      APPLICATION_NAME: FBIS
+      DEFAULT_BACKEND_DATASTORE: datastore
+      GEONODE_GEODATABASE: geonode_data
+      CONTACT_US_EMAIL: fbis@frcsa.org.za
+      SPATIAL_SCALE_TITLE: SPATIAL
+      GEONODE_GEODATABASE_USERNAME: docker
+      SITEURL: http://staging.rbis.kartoza.com/
+      DATE_TITLE: TEMPORAL
+      AUTH_WITH_EMAIL_ONLY: 'True'
+      MEDIA_ROOT: /home/web/media
+      BING_MAP_KEY: AkgNFJR-X5y5PQAuFebJ0Vme7QVH69AR4333gPTjX2tzhXBPGuyEsXDHox8Bazvy
+      GEOCONTEXT_COLLECTION_KEY: ledet
+      IUCN_API_KEY: 03415f97a543d01b01d31d46430ee3a6c3a7f5e6f84ee89e7a7fbe5a5f4a6aa3
+      DJANGO_SETTINGS_MODULE: rbis_core.settings.prod_docker
+      C_FORCE_ROOT: '1'
+      DATABASE_USERNAME: docker
+      IS_CELERY: 'False'
+      GOOGLE_ANALYTIC_KEY: UA-143784674-1
+      DATABASE_NAME: gis
+      INSTITUTION_ID_DEFAULT: RBIS
+    entrypoint:
+    - /bin/sh
+    volumes:
+    - django-static:/home/web/static:rw
+    - django-media:/home/web/media:rw
+    - django-reports:/home/web/reports
+    - django-logs:/var/log/
+    - sync-data:/data
+    - geoserver-data-dir:/usr/src/geonode/geoserver/data/data
+    links:
+    - geoserver:geoserver
+    - db:db
+    - geonode-db:geonode-db
+    - worker:worker
+    command: -c "uwsgi --ini /usr/src/rbis/uwsgi.conf"
+  worker:
+    image: dimasciput/rbis_uwsgi:latest
+    environment:
+      DATABASE_PASSWORD: docker
+      HAYSTACK_HOST: elasticsearch
+      ADMIN_EMAILS: dimas@kartoza.com
+      MAP_TILER_KEY: ''
+      GEOIP_PATH: /home/web/media/geoip.db
+      DEFAULT_BACKEND_DATASTORE: datastore
+      ROOT_URLCONF: rbis_core.urls
+      ASYNC_SIGNALS_GEONODE: 'True'
+      GEOSERVER_ADMIN_PASSWORD: admingeoserver
+      SITE_DOMAIN_NAME: http://rbis.org
+      STATIC_ROOT: /home/web/static
+      UWSGI_CMD: uwsgi --ini /usr/src/rbis/uwsgi.conf
+      GEONODE_GEODATABASE_PASSWORD: geonode_data
+      GEONODE_INSTANCE_NAME: geonode
+      SENTRY_KEY: https://972ce0b6e57b405fad27d82e3fe6bbff@sentry.io/1249655
+      GEOCONTEXT_URL: https://geocontext.kartoza.com/
+      ALLOWED_HOSTS: '["localhost","127.0.0.1","rbis.org"]'
+      DATABASE_HOST: db
+      C_FORCE_ROOT: '1'
+      GEOSERVER_PUBLIC_LOCATION: http://rbis.org/geoserver/
+      RABBITMQ_HOST: rabbitmq
+      GEONODE_DATABASE_USER: docker
+      PYTHONPATH: /usr/src/rbis:/usr/src/app:/usr/src/bims:/home/web/django_project
+      VIRTUAL_PORT: '8000'
+      VIRTUAL_HOST: rbis.org
+      BING_MAP_KEY: ''
+      GEONODE_GEODATABASE: geonode_data
+      CONTACT_US_EMAIL: dimas@kartoza.com
+      GEONODE_DATABASE: gis
+      SITEURL: http://rbis.org/
+      MEDIA_ROOT: /home/web/media
+      DATABASE_NAME: gis
+      IUCN_API_KEY: 03415f97a543d01b01d31d46430ee3a6c3a7f5e6f84ee89e7a7fbe5a5f4a6aa3
+      DJANGO_SETTINGS_MODULE: core.settings.prod_worker
+      GEONODE_DATABASE_PASSWORD: docker
+      DATABASE_USERNAME: docker
+      IS_CELERY: 'true'
+      GEOSERVER_LOCATION: http://geoserver:8080/geoserver/
+      INSTITUTION_ID_DEFAULT: RBIS
+    stdin_open: true
+    entrypoint:
+    - /bin/sh
+    volumes:
+    - django-static:/home/web/static:rw
+    - django-media:/home/web/media:rw
+    - django-reports:/home/web/reports
+    - django-logs:/var/log/
+    - sync-data:/data
+    - geoserver-data-dir:/usr/src/geonode/geoserver/data/data
+    tty: true
+    links:
+    - cache:cache
+    - rabbitmq:rabbitmq
+    - geoserver:geoserver
+    - db:db
+    - uwsgi:uwsgi
+    - geonode-db:geonode-db
+    command: -c "celery worker --app=bims.celery:app -B -l INFO"
+  db:
+    image: kartoza/postgis:9.6-2.4
+    environment:
+      ALLOW_IP_RANGE: 10.42.0.0/16
+      POSTGRES_DB: gis
+      POSTGRES_PASS: docker
+      POSTGRES_USER: docker
+    volumes:
+    - db-backups:/backups
+    - postgis-data:/sql
