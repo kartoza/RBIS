@@ -109,7 +109,7 @@ migrate:
 	@#http://stackoverflow.com/questions/3143635/how-to-ignore-mv-error
 	@# We add the '-' prefix to the next line as the migration may fail
 	@# but we want to continue anyway.
-	@docker-compose exec uwsgi python manage.py migrate
+	@docker-compose exec uwsgi python /usr/src/bims/manage.py migrate
 
 update-migrations:
 	@echo

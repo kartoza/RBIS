@@ -23,7 +23,7 @@ if [ -z "$RBIS_TAG" ]; then
 fi
 
 if [ -z "$BIMS_TAG" ]; then
-	BIMS_TAG=latest
+	BIMS_TAG=v3.0
 fi
 
 echo "RBIS_TAG=${RBIS_TAG}"
