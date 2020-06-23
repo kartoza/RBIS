@@ -9,7 +9,7 @@
 
 version: '2'
 volumes:
-  geoserver-data-dir:
+  geodatadir:
 services:
 
   smtp:
@@ -41,21 +41,36 @@ services:
   #  ports:
   #    - "25432:5432"
 
-  data-dir-conf:
-    image: geosolutionsit/geoserver_data:2.13.x
-    restart: on-failure
-    command: /bin/true
+  geonode-db:
+    # Note you cannot scale if you use container_name
+    container_name: rbis-geonode-db
+    image: kartoza/postgis:12.0
     volumes:
-      - geoserver-data-dir:/geoserver_data/data
+      #- ./pg/postgres_data:/var/lib/postgresql
+      - ./geonode-backups:/backups
+      - ./geonode-sql:/sql
+    environment:
+      - ALLOW_IP_RANGE=0.0.0.0/0
+      - POSTGRES_DBNAME=geonode_data
+      - POSTGRES_USER=geonode_data
+      - POSTGRES_PASS=docker
+    restart: unless-stopped
 
   geoserver:
-    image: geosolutionsit/geoserver-docker:2.13.x
+    image: geonode/spcgeonode:geoserver-3.0
     restart: unless-stopped
+    environment:
+      - HTTP_HOST=192.168.1.197
+      - HTTP_PORT=63305
+      - ADMIN_USERNAME=admin
+      - ADMIN_PASSWORD=admingeoserver
+      - DATABASE_URL=postgis://docker:docker@db:5432/gis
+      - GEODATABASE_URL=postgis://geonode_data:docker@db:5432/geonode_data
     depends_on:
       - db
-      - data-dir-conf
+      - geonode-db
     volumes:
-      - geoserver-data-dir:/geoserver_data/data
+      - geodatadir:/spcgeonode-geodatadir/
 
   rbis_uwsgi:
     build:
@@ -78,6 +93,9 @@ services:
       - VIRTUAL_PORT=8080
       - RABBITMQ_HOST=rabbitmq
       - CONTACT_US_EMAIL=dimas@kartoza.com
+      - GEONODE_GEODATABASE_HOST=geonode-db
+      - GEONODE_GEODATABASE_USERNAME=geonode_data
+      - GEONODE_GEODATABASE_PASSWORD=docker
     volumes:
       - ../django_project:/home/web/django_project
       - ./static:/home/web/static:rw
@@ -87,6 +105,7 @@ services:
     links:
       - smtp:smtp
       - db:db
+      - geonode-db
       - geoserver:geoserver
       - worker:worker
       - rabbitmq:rabbitmq
@@ -112,7 +131,6 @@ services:
       - PGHOST=db
       - PGDATABASE=gis
     restart: unless-stopped
-     
 
   # This is normally the main entry point for a production server
   web:
@@ -131,7 +149,6 @@ services:
       - db
       - geoserver
     restart: unless-stopped
-     
 
   btsync-db:
     # BTSync backups for database dumps
@@ -140,7 +157,6 @@ services:
     volumes:
       # We mount RW so that we can use remove peer to clean up old backups off the server
       - ./backups:/web:rw
-     
 
   btsync-media:
     # BTSync backups for django media
@@ -181,6 +197,7 @@ services:
       - APP_NAME=bims
       - ASYNC_SIGNALS_GEONODE=True
       - PYTHONPATH=/usr/src/app:/usr/src/bims:/home/web/django_project
+      - GEONODE_GEODATABASE_HOST=geonode-db
     volumes:
       - ../django_project:/home/web/django_project
       - ./static:/home/web/static:rw
@@ -190,23 +207,11 @@ services:
     links:
       - smtp:smtp
       - db:db
+      - geonode-db
       - geoserver:geoserver
       - rabbitmq:rabbitmq
       - cache:cache
     restart: unless-stopped
-     
-
-  elasticsearch:
-    # Note you cannot scale if you use conteiner_name
-    container_name: rbis-elasticsearch
-    restart: on-failure:5
-    #  read_only: true
-    image: elasticsearch:2.4.2
-    hostname: elasticsearch
-    environment:
-      - cluster.name=docker-cluster
-      - bootstrap.memory_lock=true
-     
 
   cache:
    image: memcached

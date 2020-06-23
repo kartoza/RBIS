@@ -31,7 +31,6 @@ services:
     - geoserver-data-dir:/geoserver_data/data
     - sync-data:/sync-data
     links:
-    - geonode-db:geonode-db
     - data-dir-conf:data-dir-conf
     - db:db
   cache:
@@ -80,7 +79,7 @@ services:
       PYTHONPATH: /usr/src/rbis:/usr/src/app:/usr/src/bims:/home/web/django_project
       SENTRY_KEY: https://9806d92a5ba64fe9b0bb5e8cb838fd12@sentry.io/1289403
       VIRTUAL_PORT: '8000'
-      APPLICATION_NAME: FBIS
+      APPLICATION_NAME: RBIS
       GEONODE_GEODATABASE: geonode_data
       CONTACT_US_EMAIL: fbis@frcsa.org.za
       SPATIAL_SCALE_TITLE: SPATIAL SCALE
@@ -108,7 +107,6 @@ services:
     links:
     - geoserver:geoserver
     - db:db
-    - geonode-db:geonode-db
     - worker:worker
     command: -c "cd /usr/src/bims; python manage.py clear_search_results"
     labels:
@@ -156,21 +154,6 @@ services:
       STANDBY_MODE: 'TRUE'
     volumes:
     - db-backups:/web:rw
-  geonode-db:
-    image: kartoza/postgis:9.6-2.4
-    environment:
-      ALLOW_IP_RANGE: 10.42.0.0/16
-      POSTGRES_DB: geonode_data
-      POSTGRES_PASS: docker
-      POSTGRES_USER: docker
-    stdin_open: true
-    volumes:
-    - db-backups:/backups
-    - postgis-data:/sql
-    - sync-data:/raw
-    tty: true
-    labels:
-      io.rancher.container.pull_image: always
   rabbitmq:
     image: library/rabbitmq
     environment:
@@ -267,7 +250,7 @@ services:
       VIRTUAL_PORT: '8000'
       RAVEN_CONFIG_DSN: http://a3c812775ecd4178b21e35615f09134d:9dfcfed4497d4a07a75f2ed1cd73a00b@sentry.kartoza.com/4
       VIRTUAL_HOST: staging.rbis.kartoza.com
-      APPLICATION_NAME: FBIS
+      APPLICATION_NAME: RBIS
       DEFAULT_BACKEND_DATASTORE: datastore
       GEONODE_GEODATABASE: geonode_data
       CONTACT_US_EMAIL: fbis@frcsa.org.za
@@ -299,7 +282,6 @@ services:
     links:
     - geoserver:geoserver
     - db:db
-    - geonode-db:geonode-db
     - worker:worker
     command: -c "uwsgi --ini /usr/src/rbis/uwsgi.conf"
   worker:
@@ -361,7 +343,6 @@ services:
     - geoserver:geoserver
     - db:db
     - uwsgi:uwsgi
-    - geonode-db:geonode-db
     command: -c "celery worker --app=bims.celery:app -B -l INFO"
   db:
     image: kartoza/postgis:9.6-2.4

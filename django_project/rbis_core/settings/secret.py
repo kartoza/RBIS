@@ -1,6 +1,0 @@
-SECRET_KEY = u'&6jr&*$5rjckm49w8*d06w1@#hy0jdw*c3lpq*!b%)cw8(yu%w'
-IUCN_API_KEY = '03415f97a543d01b01d31d46430ee3a6c3a7f5e6f84ee89e7a7fbe5a5f4a6aa3'
-BING_MAP_KEY = 'AkgNFJR-X5y5PQAuFebJ0Vme7QVH69AR4333gPTjX2tzhXBPGuyEsXDHox8Bazvy'
-MAP_TILER_KEY = 'GfepnJl8jdQrAm6UYO66'
-GEOCONTEXT_URL = 'https://geocontext.kartoza.com'
-GEOCONTEXT_COLLECTION_KEY = 'river'
