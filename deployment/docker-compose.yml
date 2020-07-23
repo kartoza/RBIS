@@ -60,12 +60,12 @@ services:
     image: geonode/spcgeonode:geoserver-3.0
     restart: unless-stopped
     environment:
-      - HTTP_HOST=192.168.1.197
-      - HTTP_PORT=63305
+      - HTTP_HOST=0.0.0.0
+      - HTTP_PORT=61305
       - ADMIN_USERNAME=admin
       - ADMIN_PASSWORD=admingeoserver
-      - DATABASE_URL=postgis://docker:docker@db:5432/gis
-      - GEODATABASE_URL=postgis://geonode_data:docker@db:5432/geonode_data
+      - DATABASE_URL=postgres://docker:docker@db:5432/gis
+      - GEODATABASE_URL=postgis://geonode_data:docker@geonode-db:5432/geonode_data
     depends_on:
       - db
       - geonode-db
@@ -96,6 +96,11 @@ services:
       - GEONODE_GEODATABASE_HOST=geonode-db
       - GEONODE_GEODATABASE_USERNAME=geonode_data
       - GEONODE_GEODATABASE_PASSWORD=docker
+      - ADMIN_USERNAME=kartoza
+      - ADMIN_PASSWORD=kartoza
+      - ADMIN_EMAIL=kartoza@kartoza.com
+      - GEOSERVER_ADMIN_USER=admin
+      - GEOSERVER_ADMIN_PASSWORD=admingeoserver
     volumes:
       - ../django_project:/home/web/django_project
       - ./static:/home/web/static:rw

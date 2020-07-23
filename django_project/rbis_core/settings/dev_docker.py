@@ -30,3 +30,7 @@ if os.getenv('DEFAULT_BACKEND_DATASTORE'):
         'HOST': 'geonode-db',
         'PORT': 5432
     }
+
+OGC_SERVER_DEFAULT_USER = 'admin'
+OGC_SERVER_DEFAULT_PASSWORD = 'admingeoserver'
+DEFAULT_BACKEND_UPLOADER = 'geonode.rest'

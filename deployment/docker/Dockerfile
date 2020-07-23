@@ -3,4 +3,6 @@
 FROM kartoza/kbims_uwsgi:v3.0
 MAINTAINER Dimas Ciputra<dimas@kartoza.com>
 
+ADD docker-entrypoint.sh /docker-entrypoint.sh
+RUN chmod +x /docker-entrypoint.sh
 ADD uwsgi.conf /home/web/uwsgi.conf
