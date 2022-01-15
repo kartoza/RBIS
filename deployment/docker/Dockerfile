@@ -1,6 +1,6 @@
 #--------- Generic stuff all our Dockerfiles should start with so we get caching ------------
 # Note this base image is based on debian
-FROM kartoza/kbims_uwsgi:v3.0
+FROM kartoza/kbims_uwsgi:latest
 MAINTAINER Dimas Ciputra<dimas@kartoza.com>
 
 ADD docker-entrypoint.sh /docker-entrypoint.sh
