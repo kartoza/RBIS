@@ -22,8 +22,8 @@ jobs:
     - name: Build and Publish the Docker RBIS Image	
       uses: elgohr/Publish-Docker-Github-Action@master	
       with:	
-        name: ${{ secrets.IMAGE_RBIS_NAME }}:${{ secrets.IMAGE_DEVELOP_VERSION }}	
+        name: ${{ secrets.IMAGE_RBIS_NAME }}:4.0	
         workdir: rbis/deployment/production/uwsgi	
         username: ${{ secrets.DOCKER_USERNAME }}	
         password: ${{ secrets.DOCKER_PASSWORD }}	
-        buildargs: BIMS_TAG=v3.0
+        buildargs: BIMS_TAG=latest
